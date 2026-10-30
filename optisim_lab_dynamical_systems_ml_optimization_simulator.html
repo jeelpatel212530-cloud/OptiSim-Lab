@@ -1,0 +1,1421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OptiSim-Lab — Physics-Informed ML Optimization & Dynamical Systems</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Plus Jakarta Sans & Fira Code -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Phosphor Icons -->
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            mono: ['"Fira Code"', 'monospace'],
+          },
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+              900: '#312e81',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Custom Scrollbars & Scientific Range Sliders */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f1f5f9;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+    input[type=range] {
+      -webkit-appearance: none;
+      appearance: none;
+      height: 6px;
+      border-radius: 9999px;
+      background: #e2e8f0;
+      outline: none;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #4f46e5;
+      cursor: pointer;
+      box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.2);
+      transition: transform 0.1s ease, background-color 0.15s ease;
+    }
+    input[type=range]::-webkit-slider-thumb:hover {
+      transform: scale(1.15);
+      background: #4338ca;
+    }
+    .canvas-crosshair {
+      cursor: crosshair;
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans antialiased min-h-screen flex flex-col selection:bg-indigo-100 selection:text-indigo-900">
+
+  <!-- Notification Toast -->
+  <div id="toast" class="fixed bottom-5 right-5 z-50 transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none flex items-center gap-3 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-xl text-xs sm:text-sm font-medium border border-slate-700">
+    <i id="toast-icon" class="ph-bold ph-sparkle text-indigo-400 text-lg"></i>
+    <span id="toast-msg">Simulation initialized</span>
+  </div>
+
+  <!-- Sticky Top Navigation Bar -->
+  <header class="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-xs">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-cyan-500 flex items-center justify-center text-white shadow-md shadow-indigo-500/20">
+          <i class="ph-bold ph-atom text-2xl"></i>
+        </div>
+        <div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <h1 class="font-extrabold text-lg sm:text-xl tracking-tight text-slate-900">OptiSim-Lab</h1>
+            <span class="px-2 py-0.5 text-[11px] font-mono font-semibold bg-indigo-50 text-indigo-700 rounded-full border border-indigo-200">v2.4 RK4 + SGLD Engine</span>
+            <span class="hidden md:inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium bg-emerald-50 text-emerald-700 rounded-full border border-emerald-200">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Physics &times; Data Science
+            </span>
+          </div>
+          <p class="text-xs text-slate-500">Dynamical Systems, Classical Mechanics &amp; Gradient Optimization Sandbox</p>
+        </div>
+      </div>
+
+      <!-- Global Simulation Controls & Export -->
+      <div class="flex items-center gap-2 flex-wrap">
+        <button id="btn-play-pause" class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 active:scale-95 transition shadow-xs">
+          <i id="play-icon" class="ph-bold ph-pause"></i>
+          <span id="play-label">Pause</span>
+        </button>
+        <button id="btn-step" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 active:scale-95 transition" title="Advance exactly 1 numerical time step">
+          <i class="ph-bold ph-steps"></i> Step +1
+        </button>
+        <button id="btn-reset" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 active:scale-95 transition" title="Respawn agents at starting coordinates">
+          <i class="ph-bold ph-arrow-counter-clockwise"></i> Respawn
+        </button>
+        <button id="btn-export-csv" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 active:scale-95 transition" title="Export trajectory & loss telemetry to CSV for Python/Pandas">
+          <i class="ph-bold ph-download-simple"></i> Export CSV
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content Container -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+    <!-- Top Bridge Banner: Physics <-> ML Isomorphism -->
+    <section class="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-2xl p-5 sm:p-6 shadow-md border border-slate-800 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+      <div class="space-y-1.5 max-w-3xl">
+        <div class="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full text-xs font-mono font-medium bg-indigo-500/20 text-indigo-300 border border-indigo-400/30">
+          <i class="ph-bold ph-compass-tool"></i> Theoretical Bridge: Hamiltonian Mechanics &harr; Deep Learning
+        </div>
+        <h2 class="text-lg sm:text-xl font-bold tracking-tight">Why Optimizers Behave Like Physical Particles in Potential Fields</h2>
+        <p class="text-xs sm:text-sm text-slate-300 leading-relaxed">
+          Minimizing a Machine Learning loss function <span class="font-mono text-indigo-300">L(&theta;)</span> is mathematically isomorphic to a particle of mass <span class="font-mono text-indigo-300">m</span> moving through a potential energy well <span class="font-mono text-indigo-300">U(x)</span> under viscous drag <span class="font-mono text-indigo-300">&gamma;</span> and thermal Brownian motion <span class="font-mono text-indigo-300">&radic;(2&gamma;k_B T)&xi;(t)</span>. Click anywhere on the contour map below to launch a live 4-agent race!
+        </p>
+      </div>
+      <button id="btn-toggle-theory" class="shrink-0 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold bg-white/10 hover:bg-white/15 text-white border border-white/20 transition cursor-pointer">
+        <i class="ph-bold ph-function text-indigo-300 text-base"></i>
+        <span id="theory-btn-text">Inspect Differential Equations</span>
+      </button>
+    </section>
+
+    <!-- Collapsible Mathematical Isomorphism Drawer -->
+    <section id="theory-drawer" class="hidden bg-white rounded-2xl p-5 sm:p-6 border border-slate-200 shadow-xs space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+          <i class="ph-bold ph-chalkboard-teacher text-indigo-600 text-lg"></i> Mathematical Formulation &amp; Numerical Solvers
+        </h3>
+        <span class="text-xs font-mono text-slate-400">Finite Difference &nabla;U &bull; 4th-Order Runge-Kutta</span>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
+        <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-rose-600 flex items-center gap-1.5">
+              <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span> 1. Vanilla SGD
+            </span>
+            <span class="text-[10px] font-mono bg-rose-50 text-rose-700 px-1.5 py-0.5 rounded">Overdamped Limit</span>
+          </div>
+          <p class="text-slate-600">Zero inertia (<span class="font-mono">m &rarr; 0</span>). Velocity is directly proportional to the negative gradient force:</p>
+          <div class="p-2 bg-white rounded-lg border border-slate-200 font-mono text-[11px] text-slate-800 text-center">
+            x_{t+1} = x_t - &eta;&nabla;L(x_t) + &sigma;&xi;_t
+          </div>
+        </div>
+
+        <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-amber-600 flex items-center gap-1.5">
+              <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span> 2. Heavy-Ball Momentum
+            </span>
+            <span class="text-[10px] font-mono bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded">Polyak (1964)</span>
+          </div>
+          <p class="text-slate-600">Introduces exponential velocity memory <span class="font-mono">&beta;</span> to damp high-curvature oscillations:</p>
+          <div class="p-2 bg-white rounded-lg border border-slate-200 font-mono text-[11px] text-slate-800 text-center">
+            v_{t+1} = &beta;v_t - &eta;&nabla;L(x_t)<br>x_{t+1} = x_t + v_{t+1}
+          </div>
+        </div>
+
+        <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-cyan-600 flex items-center gap-1.5">
+              <span class="w-2.5 h-2.5 rounded-full bg-cyan-500"></span> 3. Adam Optimizer
+            </span>
+            <span class="text-[10px] font-mono bg-cyan-50 text-cyan-700 px-1.5 py-0.5 rounded">Adaptive Metric</span>
+          </div>
+          <p class="text-slate-600">Normalizes each coordinate by the running RMS of its historical gradient <span class="font-mono">&radic;v&#770;_t</span>:</p>
+          <div class="p-2 bg-white rounded-lg border border-slate-200 font-mono text-[11px] text-slate-800 text-center">
+            x_{t+1} = x_t - &eta; &middot; m&#770;_t / (&radic;v&#770;_t + &epsilon;)
+          </div>
+        </div>
+
+        <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-emerald-600 flex items-center gap-1.5">
+              <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> 4. RK4 Langevin Ball
+            </span>
+            <span class="text-[10px] font-mono bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded">Underdamped ODE</span>
+          </div>
+          <p class="text-slate-600">Full 2nd-order Newtonian mechanics with mass <span class="font-mono">m</span>, drag <span class="font-mono">&gamma;</span>, and thermal bath <span class="font-mono">T</span>:</p>
+          <div class="p-2 bg-white rounded-lg border border-slate-200 font-mono text-[11px] text-slate-800 text-center">
+            m x&#776; + &gamma; x&#775; + &nabla;U(x) = &radic;(2&gamma;T)&xi;(t)
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 1-Click Preset Experiment Scenarios Bar -->
+    <section class="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div class="flex items-center gap-2 text-xs font-bold text-slate-700 shrink-0">
+        <i class="ph-bold ph-flask text-indigo-600 text-base"></i>
+        <span>1-Click Benchmark Experiments:</span>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 w-full">
+        <button data-preset="rosenbrock" class="preset-btn flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold bg-indigo-50 text-indigo-900 border border-indigo-200 hover:bg-indigo-100 transition text-left">
+          <div>
+            <div class="font-bold">1. Rosenbrock Valley Sprint</div>
+            <div class="text-[10px] text-indigo-600">Adam vs SGD in curved banana canyon</div>
+          </div>
+          <i class="ph-bold ph-Play text-indigo-600"></i>
+        </button>
+
+        <button data-preset="saddle" class="preset-btn flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold bg-slate-50 text-slate-700 border border-slate-200 hover:bg-slate-100 transition text-left">
+          <div>
+            <div class="font-bold">2. Saddle Point Escape</div>
+            <div class="text-[10px] text-slate-500">Zero-gradient plateau (&nabla;f = 0) trap</div>
+          </div>
+          <i class="ph-bold ph-Play text-slate-400"></i>
+        </button>
+
+        <button data-preset="rastrigin" class="preset-btn flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold bg-slate-50 text-slate-700 border border-slate-200 hover:bg-slate-100 transition text-left">
+          <div>
+            <div class="font-bold">3. Thermal Hopping (SGLD)</div>
+            <div class="text-[10px] text-slate-500">Brownian noise escaping local minima</div>
+          </div>
+          <i class="ph-bold ph-Play text-slate-400"></i>
+        </button>
+
+        <button data-preset="quadratic" class="preset-btn flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold bg-slate-50 text-slate-700 border border-slate-200 hover:bg-slate-100 transition text-left">
+          <div>
+            <div class="font-bold">4. High-Curvature Zig-Zag</div>
+            <div class="text-[10px] text-slate-500">Anisotropic wall oscillation damping</div>
+          </div>
+          <i class="ph-bold ph-Play text-slate-400"></i>
+        </button>
+      </div>
+    </section>
+
+    <!-- Live Agent Telemetry KPI Cards (4 Columns) -->
+    <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" id="kpi-cards-container">
+      <!-- Populated dynamically via JS for each of the 4 agents -->
+    </section>
+
+    <!-- Core Interactive Workspace: 12-Column Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+
+      <!-- Left Column (7 Cols): Interactive 2D Potential / Loss Landscape Canvas -->
+      <section class="lg:col-span-7 bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden flex flex-col">
+        <!-- Canvas Top Bar -->
+        <div class="p-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div class="flex items-center gap-2">
+              <h3 class="font-bold text-slate-900 text-sm sm:text-base">2D Potential Energy &amp; Loss Landscape</h3>
+              <span id="surface-formula-badge" class="text-[11px] font-mono bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200">f(x,y) = (1-x)² + 100(y-x²)²</span>
+            </div>
+            <p class="text-xs text-slate-500 mt-0.5">
+              <strong class="text-indigo-600">Click anywhere on the surface</strong> to relocate starting coordinates <span id="spawn-coords-label" class="font-mono text-slate-700">(-1.20, 1.00)</span>
+            </p>
+          </div>
+
+          <!-- Canvas Layer Toggles -->
+          <div class="flex items-center gap-2">
+            <label class="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600 bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-200 cursor-pointer select-none">
+              <input type="checkbox" id="chk-vectors" checked class="rounded text-indigo-600 focus:ring-indigo-500">
+              <span>Force Field (-&nabla;U)</span>
+            </label>
+            <label class="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600 bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-200 cursor-pointer select-none">
+              <input type="checkbox" id="chk-contours" checked class="rounded text-indigo-600 focus:ring-indigo-500">
+              <span>Iso-Contours</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- 2D Interactive Canvas Wrapper -->
+        <div class="relative w-full aspect-square sm:aspect-[4/3] bg-slate-950 overflow-hidden">
+          <canvas id="landscape-canvas" class="w-full h-full block canvas-crosshair"></canvas>
+
+          <!-- Floating Overlay HUD on Canvas -->
+          <div class="absolute top-3 left-3 bg-slate-900/85 backdrop-blur-md text-white px-3 py-2 rounded-xl border border-slate-700/80 text-[11px] font-mono space-y-1 pointer-events-none">
+            <div class="flex items-center gap-2">
+              <span class="text-slate-400">Iteration Step:</span>
+              <span id="hud-step" class="font-bold text-indigo-400">0</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-slate-400">Global Minimum:</span>
+              <span id="hud-target" class="text-emerald-400">(1.00, 1.00)</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-slate-400">Cursor (x, y):</span>
+              <span id="hud-cursor" class="text-amber-300">Hover canvas</span>
+            </div>
+          </div>
+
+          <!-- Legend Overlay Bottom Left -->
+          <div class="absolute bottom-3 left-3 right-3 flex flex-wrap items-center justify-between gap-2 bg-slate-900/85 backdrop-blur-md text-white px-3 py-2 rounded-xl border border-slate-700/80 text-[11px] pointer-events-none">
+            <div class="flex items-center gap-3 flex-wrap">
+              <span class="flex items-center gap-1.5 font-medium"><span class="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block"></span> SGD</span>
+              <span class="flex items-center gap-1.5 font-medium"><span class="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block"></span> Momentum</span>
+              <span class="flex items-center gap-1.5 font-medium"><span class="w-2.5 h-2.5 rounded-full bg-cyan-400 inline-block"></span> Adam</span>
+              <span class="flex items-center gap-1.5 font-medium"><span class="w-2.5 h-2.5 rounded-full bg-emerald-400 inline-block"></span> RK4 Physics Ball</span>
+            </div>
+            <span class="text-[10px] font-mono text-slate-400">★ Cyan Star = Global Minimum</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right Column (5 Cols): Hyperparameter & Dynamical System Controls -->
+      <section class="lg:col-span-5 bg-white rounded-2xl border border-slate-200 shadow-xs p-5 space-y-5">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div>
+            <h3 class="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2">
+              <i class="ph-bold ph-sliders-horizontal text-indigo-600"></i> Hyperparameters &amp; Physics Controls
+            </h3>
+            <p class="text-xs text-slate-500">Adjust parameters in real time during the race</p>
+          </div>
+          <select id="select-surface" class="text-xs font-bold bg-indigo-50 text-indigo-900 border border-indigo-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
+            <option value="rosenbrock">Rosenbrock Banana</option>
+            <option value="saddle">Minimax Saddle Point</option>
+            <option value="rastrigin">Rastrigin Multi-Modal</option>
+            <option value="quadratic">Anisotropic Canyon</option>
+          </select>
+        </div>
+
+        <!-- Active Agent Filter Toggles -->
+        <div class="space-y-2">
+          <label class="text-xs font-bold text-slate-700 uppercase tracking-wider block">Active Competitors</label>
+          <div class="grid grid-cols-2 gap-2" id="agent-toggles">
+            <label class="flex items-center gap-2 p-2 rounded-xl border border-slate-200 bg-slate-50/60 cursor-pointer text-xs font-semibold">
+              <input type="checkbox" data-agent="sgd" checked class="agent-toggle rounded text-rose-600">
+              <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+              <span>Vanilla SGD</span>
+            </label>
+            <label class="flex items-center gap-2 p-2 rounded-xl border border-slate-200 bg-slate-50/60 cursor-pointer text-xs font-semibold">
+              <input type="checkbox" data-agent="momentum" checked class="agent-toggle rounded text-amber-500">
+              <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+              <span>SGD + Momentum</span>
+            </label>
+            <label class="flex items-center gap-2 p-2 rounded-xl border border-slate-200 bg-slate-50/60 cursor-pointer text-xs font-semibold">
+              <input type="checkbox" data-agent="adam" checked class="agent-toggle rounded text-cyan-500">
+              <span class="w-2.5 h-2.5 rounded-full bg-cyan-500"></span>
+              <span>Adam Optimizer</span>
+            </label>
+            <label class="flex items-center gap-2 p-2 rounded-xl border border-slate-200 bg-slate-50/60 cursor-pointer text-xs font-semibold">
+              <input type="checkbox" data-agent="rk4" checked class="agent-toggle rounded text-emerald-500">
+              <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+              <span>RK4 Physics Ball</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Sliders Group 1: ML Optimization Hyperparameters -->
+        <div class="space-y-3.5 pt-2 border-t border-slate-100">
+          <div class="text-xs font-bold text-indigo-700 uppercase tracking-wider flex items-center gap-1.5">
+            <i class="ph-bold ph-cpu"></i> ML Gradient Parameters
+          </div>
+
+          <!-- Learning Rate Slider -->
+          <div class="space-y-1">
+            <div class="flex justify-between text-xs">
+              <span class="font-semibold text-slate-700">Learning Rate (<span class="font-mono">&eta;</span>)</span>
+              <span id="val-lr" class="font-mono font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">0.004</span>
+            </div>
+            <input type="range" id="slider-lr" min="0.0005" max="0.08" step="0.0005" value="0.004" class="w-full">
+            <div class="flex justify-between text-[10px] text-slate-400">
+              <span>0.0005 (Slow/Stable)</span>
+              <span>0.08 (Fast/Divergent)</span>
+            </div>
+          </div>
+
+          <!-- Momentum Beta Slider -->
+          <div class="space-y-1">
+            <div class="flex justify-between text-xs">
+              <span class="font-semibold text-slate-700">Momentum Coefficient (<span class="font-mono">&beta;</span>)</span>
+              <span id="val-beta" class="font-mono font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">0.88</span>
+            </div>
+            <input type="range" id="slider-beta" min="0.0" max="0.98" step="0.01" value="0.88" class="w-full">
+            <div class="flex justify-between text-[10px] text-slate-400">
+              <span>0.0 (No Memory)</span>
+              <span>0.98 (High Inertia)</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sliders Group 2: Classical & Statistical Mechanics (RK4 + Langevin) -->
+        <div class="space-y-3.5 pt-3 border-t border-slate-100">
+          <div class="text-xs font-bold text-emerald-700 uppercase tracking-wider flex items-center gap-1.5">
+            <i class="ph-bold ph-wave-sine"></i> Physical &amp; Thermodynamic Parameters
+          </div>
+
+          <!-- Particle Mass (m) -->
+          <div class="space-y-1">
+            <div class="flex justify-between text-xs">
+              <span class="font-semibold text-slate-700">Particle Mass (<span class="font-mono">m</span>)</span>
+              <span id="val-mass" class="font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">1.20</span>
+            </div>
+            <input type="range" id="slider-mass" min="0.2" max="5.0" step="0.1" value="1.2" class="w-full">
+          </div>
+
+          <!-- Viscous Drag / Damping (gamma) -->
+          <div class="space-y-1">
+            <div class="flex justify-between text-xs">
+              <span class="font-semibold text-slate-700">Viscous Damping (<span class="font-mono">&gamma;</span>)</span>
+              <span id="val-gamma" class="font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">1.80</span>
+            </div>
+            <input type="range" id="slider-gamma" min="0.1" max="8.0" step="0.1" value="1.8" class="w-full">
+          </div>
+
+          <!-- Thermal Langevin Noise (Temperature T / Sigma) -->
+          <div class="space-y-1">
+            <div class="flex justify-between text-xs">
+              <span class="font-semibold text-slate-700 flex items-center gap-1">
+                Thermal Brownian Noise (<span class="font-mono">T / &sigma;</span>)
+              </span>
+              <span id="val-noise" class="font-mono font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded">0.00</span>
+            </div>
+            <input type="range" id="slider-noise" min="0.0" max="0.80" step="0.02" value="0.00" class="w-full">
+            <p class="text-[11px] text-slate-400">
+              Injects Gaussian kicks <span class="font-mono">&radic;(2&gamma;k_B T)&mathcal{N}(0,1)</span> to escape saddle points &amp; local minima.
+            </p>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Bottom Analytics Row: Real-Time Log-Loss Convergence Plot & Live Telemetry Table -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+      <!-- Real-time Convergence Chart Canvas (6 Cols) -->
+      <section class="lg:col-span-6 bg-white rounded-2xl border border-slate-200 shadow-xs p-5 flex flex-col justify-between space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div>
+            <h3 class="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2">
+              <i class="ph-bold ph-chart-line-up text-indigo-600"></i> Real-Time Convergence Telemetry
+            </h3>
+            <p class="text-xs text-slate-500">Log-scale objective loss <span class="font-mono">log₁₀(L(x_t) + 10⁻⁶)</span> vs Iteration Step</p>
+          </div>
+          <span class="text-[11px] font-mono bg-slate-100 text-slate-600 px-2 py-1 rounded">Lower = Better</span>
+        </div>
+
+        <div class="w-full h-56 bg-slate-950 rounded-xl p-2 border border-slate-800 relative">
+          <canvas id="convergence-canvas" class="w-full h-full block"></canvas>
+        </div>
+
+        <div class="flex items-center justify-between text-[11px] text-slate-500 pt-1">
+          <span> Notice how underdamped physics (<span class="text-emerald-600 font-bold">RK4</span>) &amp; <span class="text-amber-600 font-bold">Momentum</span> exhibit damped harmonic oscillations near the minimum.</span>
+        </div>
+      </section>
+
+      <!-- Live Numerical Telemetry Table & Insights (6 Cols) -->
+      <section class="lg:col-span-6 bg-white rounded-2xl border border-slate-200 shadow-xs p-5 flex flex-col justify-between space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div>
+            <h3 class="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2">
+              <i class="ph-bold ph-table text-indigo-600"></i> Phase-Space &amp; Gradient State Matrix
+            </h3>
+            <p class="text-xs text-slate-500">Instantaneous coordinates, potential energy, gradient norm &amp; kinetic energy</p>
+          </div>
+          <span id="sim-status-pill" class="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+            Running 60 FPS
+          </span>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr class="border-b border-slate-200 text-slate-500 font-bold uppercase text-[10px] tracking-wider">
+                <th class="py-2.5 px-2">Agent</th>
+                <th class="py-2.5 px-2">Pos (x, y)</th>
+                <th class="py-2.5 px-2">Loss U(x)</th>
+                <th class="py-2.5 px-2">||&nabla;U(x)||</th>
+                <th class="py-2.5 px-2">KE (&frac12;v²)</th>
+                <th class="py-2.5 px-2 text-right">Regime</th>
+              </tr>
+            </thead>
+            <tbody id="telemetry-table-body" class="divide-y divide-slate-100 font-mono text-[11px]">
+              <!-- Populated dynamically via JS -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Physics-to-Data Science Live Diagnostic Box -->
+        <div class="bg-indigo-50/70 border border-indigo-100 rounded-xl p-3.5 text-xs space-y-1">
+          <div class="font-bold text-indigo-950 flex items-center gap-1.5">
+            <i class="ph-bold ph-lightbulb text-indigo-600"></i> Live Dynamical Diagnostic
+          </div>
+          <p id="diagnostic-text" class="text-indigo-900/80 leading-relaxed">
+            In the Rosenbrock banana valley, Vanilla SGD quickly hits the valley floor but crawls along the shallow curve because its step is strictly orthogonal to the contour lines. Adam rescales each coordinate by its historical variance, acting like an anisotropic mass tensor.
+          </p>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="bg-white border-t border-slate-200 mt-8 py-5 text-xs text-slate-500">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2">
+      <div class="flex items-center gap-2">
+        <span class="font-bold text-slate-800">OptiSim-Lab</span>
+        <span>&bull;</span>
+        <span>Physics-Informed Machine Learning &amp; Numerical Optimization Portfolio Project</span>
+      </div>
+      <div class="font-mono text-[11px] text-slate-400">
+        Zero-Backend HTML5 Canvas &bull; RK4 &amp; Stochastic Langevin Engine
+      </div>
+    </div>
+  </footer>
+
+  <!-- ==========================================================================
+       APPLICATION NUMERICAL & SIMULATION ENGINE
+       ========================================================================== -->
+  <script>
+    /**
+     * 1. MATHEMATICAL LOSS SURFACES (POTENTIAL ENERGY FUNCTIONS U(x, y))
+     */
+    const SURFACES = {
+      rosenbrock: {
+        name: "Rosenbrock Banana Valley",
+        formula: "f(x,y) = (1-x)² + 100(y-x²)²",
+        domain: { xMin: -2.0, xMax: 2.0, yMin: -1.0, yMax: 3.0 },
+        defaultSpawn: { x: -1.4, y: 2.2 },
+        globalMin: { x: 1.0, y: 1.0 },
+        // Scaled down by 0.015 so gradients stay numerically well-behaved across interactive learning rates
+        eval: (x, y) => 0.015 * (Math.pow(1 - x, 2) + 100 * Math.pow(y - x * x, 2)),
+        diagnostic: "Rosenbrock Valley: The steep walls create huge gradients perpendicular to the valley floor, while the floor itself has a tiny slope toward (1,1). Adam adapts its effective learning rate per axis, whereas Vanilla SGD crawls."
+      },
+      saddle: {
+        name: "Minimax Saddle Surface",
+        formula: "f(x,y) = 0.8x² - 0.8y² + 2",
+        domain: { xMin: -2.2, xMax: 2.2, yMin: -2.2, yMax: 2.2 },
+        defaultSpawn: { x: 1.6, y: 0.001 },
+        globalMin: { x: 0.0, y: 2.1 },
+        eval: (x, y) => {
+          // Soft wall boundary at edges so particles don't fly to infinity
+          const confine = 0.04 * Math.pow(x * x + y * y, 2);
+          return 0.8 * x * x - 0.8 * y * y + confine + 2.5;
+        },
+        diagnostic: "Saddle Point Escape: Starting along y ≈ 0 places agents on the unstable ridge where ∂f/∂y ≈ 0. Vanilla SGD stalls near (0,0), while RK4 inertia and Thermal Noise (T > 0) break symmetry and roll down into the y-wells!"
+      },
+      rastrigin: {
+        name: "Rastrigin Multi-Modal Trap",
+        formula: "f(x,y) = 2 + x² - cos(2πx) + y² - cos(2πy)",
+        domain: { xMin: -2.3, xMax: 2.3, yMin: -2.3, yMax: 2.3 },
+        defaultSpawn: { x: -1.85, y: 1.65 },
+        globalMin: { x: 0.0, y: 0.0 },
+        eval: (x, y) => 0.35 * (20 + (x * x - 10 * Math.cos(2 * Math.PI * x)) + (y * y - 10 * Math.cos(2 * Math.PI * y))),
+        diagnostic: "Rastrigin Local Minima: Contains dozens of deep sinusoidal potential wells. Deterministic gradient descent gets permanently trapped in the nearest local well unless Momentum or Thermal Brownian Noise (SGLD) kicks it over the energy barrier."
+      },
+      quadratic: {
+        name: "Anisotropic High-Curvature Canyon",
+        formula: "f(x,y) = 0.25x² + 6.5y²",
+        domain: { xMin: -2.4, xMax: 2.4, yMin: -2.0, yMax: 2.0 },
+        defaultSpawn: { x: -2.0, y: 1.5 },
+        globalMin: { x: 0.0, y: 0.0 },
+        eval: (x, y) => 0.25 * x * x + 6.5 * y * y,
+        diagnostic: "Anisotropic Canyon: The Hessian condition number κ = λ_max / λ_min = 26. High learning rates cause Vanilla SGD to bounce violently between the steep y-walls, while Heavy-Ball Momentum and Viscous Damping cancel out opposite-sign oscillations."
+      }
+    };
+
+    /**
+     * 2. NUMERICAL DIFFERENTIATION & GAUSSIAN RANDOM GENERATOR
+     */
+    function computeGradient(surfaceKey, x, y) {
+      const fn = SURFACES[surfaceKey].eval;
+      const h = 1e-5;
+      const dfdx = (fn(x + h, y) - fn(x - h, y)) / (2 * h);
+      const dfdy = (fn(x, y + h) - fn(x, y - h)) / (2 * h);
+      return { gx: dfdx, gy: dfdy };
+    }
+
+    // Box-Muller Transform for standard normal random variable N(0, 1)
+    function gaussianRandom() {
+      let u = 0, v = 0;
+      while (u === 0) u = Math.random();
+      while (v === 0) v = Math.random();
+      return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+    }
+
+    /**
+     * 3. SIMULATION STATE & AGENT DEFINITIONS
+     */
+    let state = {
+      surface: 'rosenbrock',
+      isRunning: true,
+      stepCount: 0,
+      maxSteps: 800,
+      spawnPos: { x: -1.4, y: 2.2 },
+      showVectors: true,
+      showContours: true,
+      params: {
+        lr: 0.004,
+        beta: 0.88,
+        mass: 1.2,
+        gamma: 1.8,
+        noise: 0.00
+      },
+      activeAgents: {
+        sgd: true,
+        momentum: true,
+        adam: true,
+        rk4: true
+      },
+      agents: [],
+      telemetryLog: [] // Stored for CSV export
+    };
+
+    const AGENT_CONFIGS = [
+      { id: 'sgd', name: 'Vanilla SGD', color: '#f43f5e', badgeBg: 'bg-rose-50', badgeText: 'text-rose-700', border: 'border-rose-200' },
+      { id: 'momentum', name: 'SGD + Momentum', color: '#f59e0b', badgeBg: 'bg-amber-50', badgeText: 'text-amber-700', border: 'border-amber-200' },
+      { id: 'adam', name: 'Adam Optimizer', color: '#06b6d4', badgeBg: 'bg-cyan-50', badgeText: 'text-cyan-700', border: 'border-cyan-200' },
+      { id: 'rk4', name: 'RK4 Physics Ball', color: '#10b981', badgeBg: 'bg-emerald-50', badgeText: 'text-emerald-700', border: 'border-emerald-200' }
+    ];
+
+    function initAgents() {
+      const { x, y } = state.spawnPos;
+      const initialLoss = SURFACES[state.surface].eval(x, y);
+      const { gx, gy } = computeGradient(state.surface, x, y);
+      const gNorm = Math.hypot(gx, gy);
+
+      state.stepCount = 0;
+      state.telemetryLog = [];
+
+      state.agents = AGENT_CONFIGS.map(cfg => ({
+        ...cfg,
+        x: x,
+        y: y,
+        vx: 0,
+        vy: 0,
+        // Adam moments
+        mx: 0,
+        my: 0,
+        ux: 0,
+        uy: 0,
+        t: 0,
+        loss: initialLoss,
+        gradNorm: gNorm,
+        ke: 0,
+        status: 'Exploring',
+        trail: [{ x, y }],
+        lossHistory: [initialLoss]
+      }));
+
+      recordTelemetrySnapshot();
+      renderKPICards();
+      renderTelemetryTable();
+    }
+
+    /**
+     * 4. STEPPING EACH OPTIMIZER & RK4 DYNAMICAL SYSTEM
+     */
+    function stepSimulation() {
+      if (state.stepCount >= state.maxSteps) {
+        state.isRunning = false;
+        updatePlayPauseUI();
+        return;
+      }
+
+      state.stepCount++;
+      const surf = SURFACES[state.surface];
+      const { lr, beta, mass, gamma, noise } = state.params;
+
+      state.agents.forEach(agent => {
+        if (!state.activeAgents[agent.id]) return;
+
+        agent.t += 1;
+        const { gx, gy } = computeGradient(state.surface, agent.x, agent.y);
+
+        // Thermal Brownian Langevin kick
+        const noiseScale = noise * 0.08;
+        const kickX = noiseScale * gaussianRandom();
+        const kickY = noiseScale * gaussianRandom();
+
+        if (agent.id === 'sgd') {
+          // 1. Overdamped Steepest Descent
+          const dx = -lr * gx + kickX;
+          const dy = -lr * gy + kickY;
+          agent.vx = dx / 0.05;
+          agent.vy = dy / 0.05;
+          agent.x += dx;
+          agent.y += dy;
+
+        } else if (agent.id === 'momentum') {
+          // 2. Polyak Heavy-Ball Momentum
+          agent.vx = beta * agent.vx - lr * gx + kickX;
+          agent.vy = beta * agent.vy - lr * gy + kickY;
+          agent.x += agent.vx;
+          agent.y += agent.vy;
+
+        } else if (agent.id === 'adam') {
+          // 3. Adam Adaptive Moment Estimation
+          const b1 = 0.9, b2 = 0.999, eps = 1e-8;
+          const adamLr = lr * 3.5; // Standard Adam step scale relative to raw SGD
+          agent.mx = b1 * agent.mx + (1 - b1) * gx;
+          agent.my = b1 * agent.my + (1 - b1) * gy;
+          agent.ux = b2 * agent.ux + (1 - b2) * (gx * gx);
+          agent.uy = b2 * agent.uy + (1 - b2) * (gy * gy);
+
+          const mHatX = agent.mx / (1 - Math.pow(b1, agent.t));
+          const mHatY = agent.my / (1 - Math.pow(b1, agent.t));
+          const uHatX = agent.ux / (1 - Math.pow(b2, agent.t));
+          const uHatY = agent.uy / (1 - Math.pow(b2, agent.t));
+
+          const dx = -adamLr * (mHatX / (Math.sqrt(uHatX) + eps)) + kickX * 0.5;
+          const dy = -adamLr * (mHatY / (Math.sqrt(uHatY) + eps)) + kickY * 0.5;
+          agent.vx = dx / 0.05;
+          agent.vy = dy / 0.05;
+          agent.x += dx;
+          agent.y += dy;
+
+        } else if (agent.id === 'rk4') {
+          // 4. Classical Mechanics Ball: 4th-Order Runge-Kutta Integration
+          // m * x'' + gamma * x' + dU/dx = sqrt(2*gamma*T) * xi(t)
+          const dt = Math.min(0.08, Math.sqrt(lr) * 0.85);
+
+          const accel = (px, py, pvx, pvy) => {
+            const g = computeGradient(state.surface, px, py);
+            return {
+              ax: (-g.gx - gamma * pvx) / mass,
+              ay: (-g.gy - gamma * pvy) / mass
+            };
+          };
+
+          // k1
+          const a1 = accel(agent.x, agent.y, agent.vx, agent.vy);
+          const k1x = agent.vx, k1y = agent.vy;
+          const k1vx = a1.ax, k1vy = a1.ay;
+
+          // k2
+          const a2 = accel(agent.x + 0.5 * dt * k1x, agent.y + 0.5 * dt * k1y, agent.vx + 0.5 * dt * k1vx, agent.vy + 0.5 * dt * k1vy);
+          const k2x = agent.vx + 0.5 * dt * k1vx, k2y = agent.vy + 0.5 * dt * k1vy;
+          const k2vx = a2.ax, k2vy = a2.ay;
+
+          // k3
+          const a3 = accel(agent.x + 0.5 * dt * k2x, agent.y + 0.5 * dt * k2y, agent.vx + 0.5 * dt * k2vx, agent.vy + 0.5 * dt * k2vy);
+          const k3x = agent.vx + 0.5 * dt * k2vx, k3y = agent.vy + 0.5 * dt * k2vy;
+          const k3vx = a3.ax, k3vy = a3.ay;
+
+          // k4
+          const a4 = accel(agent.x + dt * k3x, agent.y + dt * k3y, agent.vx + dt * k3vx, agent.vy + dt * k3vy);
+          const k4x = agent.vx + dt * k3vx, k4y = agent.vy + dt * k3vy;
+          const k4vx = a4.ax, k4vy = a4.ay;
+
+          // RK4 Position & Velocity Update + Langevin Thermal Impulse
+          const thermalKick = Math.sqrt(2 * gamma * noise * dt) / mass;
+          agent.x += (dt / 6) * (k1x + 2 * k2x + 2 * k3x + k4x);
+          agent.y += (dt / 6) * (k1y + 2 * k2y + 2 * k3y + k4y);
+          agent.vx += (dt / 6) * (k1vx + 2 * k2vx + 2 * k3vx + k4vx) + thermalKick * gaussianRandom() * 0.25;
+          agent.vy += (dt / 6) * (k1vy + 2 * k2vy + 2 * k3vy + k4vy) + thermalKick * gaussianRandom() * 0.25;
+        }
+
+        // Clamp within domain bounds with gentle elastic reflection
+        const dom = surf.domain;
+        if (agent.x < dom.xMin) { agent.x = dom.xMin; agent.vx *= -0.4; }
+        if (agent.x > dom.xMax) { agent.x = dom.xMax; agent.vx *= -0.4; }
+        if (agent.y < dom.yMin) { agent.y = dom.yMin; agent.vy *= -0.4; }
+        if (agent.y > dom.yMax) { agent.y = dom.yMax; agent.vy *= -0.4; }
+
+        // Update Telemetry Metrics
+        agent.loss = surf.eval(agent.x, agent.y);
+        const newG = computeGradient(state.surface, agent.x, agent.y);
+        agent.gradNorm = Math.hypot(newG.gx, newG.gy);
+        agent.ke = 0.5 * mass * (agent.vx * agent.vx + agent.vy * agent.vy);
+
+        // Determine dynamical regime status
+        const distToGoal = Math.hypot(agent.x - surf.globalMin.x, agent.y - surf.globalMin.y);
+        if (distToGoal < 0.08) {
+          agent.status = 'Converged ✓';
+        } else if (agent.gradNorm < 0.03 && distToGoal >= 0.08) {
+          agent.status = 'Stalled / Saddle';
+        } else if (agent.ke > 0.35) {
+          agent.status = 'Underdamped Osc';
+        } else {
+          agent.status = 'Descending';
+        }
+
+        // Append Trail & History
+        agent.trail.push({ x: agent.x, y: agent.y });
+        if (agent.trail.length > 220) agent.trail.shift();
+        agent.lossHistory.push(agent.loss);
+      });
+
+      if (state.stepCount % 2 === 0) {
+        recordTelemetrySnapshot();
+      }
+    }
+
+    function recordTelemetrySnapshot() {
+      const row = { step: state.stepCount };
+      state.agents.forEach(a => {
+        row[`${a.id}_x`] = a.x.toFixed(4);
+        row[`${a.id}_y`] = a.y.toFixed(4);
+        row[`${a.id}_loss`] = a.loss.toFixed(5);
+        row[`${a.id}_grad`] = a.gradNorm.toFixed(4);
+      });
+      state.telemetryLog.push(row);
+    }
+
+    /**
+     * 5. 2D CANVAS RENDERER: OFF-SCREEN CONTOUR HEATMAP + LIVE TRAJECTORIES
+     */
+    const landscapeCanvas = document.getElementById('landscape-canvas');
+    const lCtx = landscapeCanvas.getContext('2d');
+    const convergenceCanvas = document.getElementById('convergence-canvas');
+    const cCtx = convergenceCanvas.getContext('2d');
+
+    let offscreenHeatmap = document.createElement('canvas');
+    let heatmapDirty = true;
+
+    // Coordinate conversion helpers
+    function worldToScreen(wx, wy, width, height) {
+      const dom = SURFACES[state.surface].domain;
+      const sx = ((wx - dom.xMin) / (dom.xMax - dom.xMin)) * width;
+      const sy = height - ((wy - dom.yMin) / (dom.yMax - dom.yMin)) * height;
+      return { sx, sy };
+    }
+
+    function screenToWorld(sx, sy, width, height) {
+      const dom = SURFACES[state.surface].domain;
+      const wx = dom.xMin + (sx / width) * (dom.xMax - dom.xMin);
+      const wy = dom.yMin + ((height - sy) / height) * (dom.yMax - dom.yMin);
+      return { wx, wy };
+    }
+
+    // Scientific Viridis/Plasma-inspired colormap for loss landscape
+    function valueToColor(t) {
+      // t in [0, 1], 0 = deep indigo/teal minimum, 1 = bright amber/rose peak
+      const clampT = Math.max(0, Math.min(1, t));
+      const r = Math.floor(15 + 215 * Math.pow(clampT, 1.3));
+      const g = Math.floor(23 + 140 * Math.sin(clampT * Math.PI * 0.85));
+      const b = Math.floor(65 + 160 * (1 - clampT * 0.75));
+      return [r, g, b];
+    }
+
+    function buildHeatmapCache(width, height) {
+      offscreenHeatmap.width = width;
+      offscreenHeatmap.height = height;
+      const oCtx = offscreenHeatmap.getContext('2d');
+      const imgData = oCtx.createImageData(width, height);
+      const data = imgData.data;
+
+      const surf = SURFACES[state.surface];
+      // Sample min/max across grid
+      let minVal = Infinity, maxVal = -Infinity;
+      const values = new Float32Array(width * height);
+
+      for (let py = 0; py < height; py++) {
+        for (let px = 0; px < width; px++) {
+          const { wx, wy } = screenToWorld(px, py, width, height);
+          // Log-compressed potential for rich visual dynamic range
+          const raw = surf.eval(wx, wy);
+          const v = Math.log10(Math.max(0, raw) + 0.08);
+          values[py * width + px] = v;
+          if (v < minVal) minVal = v;
+          if (v > maxVal) maxVal = v;
+        }
+      }
+
+      const range = Math.max(1e-5, maxVal - minVal);
+      const numContourBands = 18;
+
+      for (let i = 0; i < values.length; i++) {
+        const norm = (values[i] - minVal) / range;
+        const [r, g, b] = valueToColor(norm);
+
+        // Draw crisp iso-potential contour lines
+        let contourFactor = 1.0;
+        if (state.showContours) {
+          const bandPos = (norm * numContourBands) % 1;
+          if (bandPos < 0.065) {
+            contourFactor = 0.65;
+          }
+        }
+
+        const idx = i * 4;
+        data[idx] = r * contourFactor;
+        data[idx + 1] = g * contourFactor;
+        data[idx + 2] = b * contourFactor;
+        data[idx + 3] = 255;
+      }
+
+      oCtx.putImageData(imgData, 0, 0);
+
+      // Optional Vector Force Field (-grad U)
+      if (state.showVectors) {
+        const gridStep = 36;
+        oCtx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
+        oCtx.fillStyle = 'rgba(255, 255, 255, 0.28)';
+        oCtx.lineWidth = 1;
+
+        for (let py = gridStep / 2; py < height; py += gridStep) {
+          for (let px = gridStep / 2; px < width; px += gridStep) {
+            const { wx, wy } = screenToWorld(px, py, width, height);
+            const { gx, gy } = computeGradient(state.surface, wx, wy);
+            const mag = Math.hypot(gx, gy);
+            if (mag < 1e-6) continue;
+
+            // Point in direction of negative gradient force (-gx, +gy on screen)
+            const nx = -gx / mag;
+            const ny = gy / mag; // Screen Y is inverted
+            const len = Math.min(12, 4 + Math.log1p(mag) * 3.5);
+
+            const ex = px + nx * len;
+            const ey = py + ny * len;
+
+            oCtx.beginPath();
+            oCtx.moveTo(px, py);
+            oCtx.lineTo(ex, ey);
+            oCtx.stroke();
+
+            // Tiny arrowhead dot at tip
+            oCtx.beginPath();
+            oCtx.arc(ex, ey, 1.5, 0, Math.PI * 2);
+            oCtx.fill();
+          }
+        }
+      }
+
+      heatmapDirty = false;
+    }
+
+    function renderLandscapeCanvas() {
+      const width = landscapeCanvas.width;
+      const height = landscapeCanvas.height;
+      if (width === 0 || height === 0) return;
+
+      if (heatmapDirty) {
+        buildHeatmapCache(width, height);
+      }
+
+      // 1. Blit pre-rendered contour heatmap
+      lCtx.drawImage(offscreenHeatmap, 0, 0);
+
+      const surf = SURFACES[state.surface];
+
+      // 2. Draw Spawn Coordinate Crosshair
+      const spawnScreen = worldToScreen(state.spawnPos.x, state.spawnPos.y, width, height);
+      lCtx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+      lCtx.lineWidth = 1.5;
+      lCtx.beginPath();
+      lCtx.arc(spawnScreen.sx, spawnScreen.sy, 6, 0, Math.PI * 2);
+      lCtx.stroke();
+
+      // 3. Draw Global Minimum Target Star
+      const minScreen = worldToScreen(surf.globalMin.x, surf.globalMin.y, width, height);
+      lCtx.save();
+      lCtx.translate(minScreen.sx, minScreen.sy);
+      lCtx.fillStyle = '#22d3ee';
+      lCtx.strokeStyle = '#0f172a';
+      lCtx.lineWidth = 2;
+      lCtx.beginPath();
+      for (let i = 0; i < 5; i++) {
+        lCtx.lineTo(Math.cos((18 + i * 72) * Math.PI / 180) * 9, -Math.sin((18 + i * 72) * Math.PI / 180) * 9);
+        lCtx.lineTo(Math.cos((54 + i * 72) * Math.PI / 180) * 4, -Math.sin((54 + i * 72) * Math.PI / 180) * 4);
+      }
+      lCtx.closePath();
+      lCtx.fill();
+      lCtx.stroke();
+      lCtx.restore();
+
+      // 4. Draw Agent Trajectories & Glowing Particles
+      state.agents.forEach(agent => {
+        if (!state.activeAgents[agent.id]) return;
+
+        // Draw Trajectory Path
+        if (agent.trail.length > 1) {
+          lCtx.beginPath();
+          lCtx.strokeStyle = agent.color;
+          lCtx.lineWidth = 2.5;
+          lCtx.lineJoin = 'round';
+          lCtx.lineCap = 'round';
+
+          agent.trail.forEach((pt, idx) => {
+            const { sx, sy } = worldToScreen(pt.x, pt.y, width, height);
+            if (idx === 0) lCtx.moveTo(sx, sy);
+            else lCtx.lineTo(sx, sy);
+          });
+          lCtx.stroke();
+        }
+
+        // Draw Current Agent Particle Head
+        const { sx, sy } = worldToScreen(agent.x, agent.y, width, height);
+
+        // Outer halo
+        lCtx.beginPath();
+        lCtx.fillStyle = agent.color + '44';
+        lCtx.arc(sx, sy, 10, 0, Math.PI * 2);
+        lCtx.fill();
+
+        // Solid Core
+        lCtx.beginPath();
+        lCtx.fillStyle = agent.color;
+        lCtx.strokeStyle = '#ffffff';
+        lCtx.lineWidth = 2;
+        lCtx.arc(sx, sy, 5.5, 0, Math.PI * 2);
+        lCtx.fill();
+        lCtx.stroke();
+      });
+
+      document.getElementById('hud-step').textContent = state.stepCount;
+    }
+
+    /**
+     * 6. REAL-TIME LOG-LOSS CONVERGENCE SPARKLINE CHART
+     */
+    function renderConvergenceCanvas() {
+      const width = convergenceCanvas.width;
+      const height = convergenceCanvas.height;
+      if (width === 0 || height === 0) return;
+
+      cCtx.clearRect(0, 0, width, height);
+
+      const padLeft = 42, padRight = 15, padTop = 15, padBottom = 24;
+      const plotW = width - padLeft - padRight;
+      const plotH = height - padTop - padBottom;
+
+      // Subtle grid lines
+      cCtx.strokeStyle = 'rgba(148, 163, 184, 0.15)';
+      cCtx.fillStyle = '#94a3b8';
+      cCtx.font = '10px "Fira Code", monospace';
+      cCtx.lineWidth = 1;
+
+      // Determine dynamic log-loss bounds across active agents
+      let minLog = -4, maxLog = 1.5;
+      let maxLen = 10;
+
+      state.agents.forEach(a => {
+        if (!state.activeAgents[a.id]) return;
+        maxLen = Math.max(maxLen, a.lossHistory.length);
+        a.lossHistory.forEach(val => {
+          const lv = Math.log10(Math.max(1e-6, val));
+          if (lv < minLog) minLog = lv;
+          if (lv > maxLog) maxLog = lv;
+        });
+      });
+
+      const logRange = Math.max(1e-3, maxLog - minLog);
+
+      for (let i = 0; i <= 4; i++) {
+        const y = padTop + (i / 4) * plotH;
+        const val = maxLog - (i / 4) * logRange;
+        cCtx.beginPath();
+        cCtx.moveTo(padLeft, y);
+        cCtx.lineTo(width - padRight, y);
+        cCtx.stroke();
+        cCtx.fillText(val.toFixed(1), 6, y + 3);
+      }
+
+      // Plot each active agent's loss curve
+      state.agents.forEach(agent => {
+        if (!state.activeAgents[agent.id] || agent.lossHistory.length < 2) return;
+
+        cCtx.beginPath();
+        cCtx.strokeStyle = agent.color;
+        cCtx.lineWidth = 2;
+
+        agent.lossHistory.forEach((loss, idx) => {
+          const px = padLeft + (idx / Math.max(1, maxLen - 1)) * plotW;
+          const lv = Math.log10(Math.max(1e-6, loss));
+          const py = padTop + ((maxLog - lv) / logRange) * plotH;
+          if (idx === 0) cCtx.moveTo(px, py);
+          else cCtx.lineTo(px, py);
+        });
+        cCtx.stroke();
+      });
+
+      // X-axis label
+      cCtx.fillStyle = '#64748b';
+      cCtx.fillText(`Step 0`, padLeft, height - 6);
+      cCtx.fillText(`Step ${state.stepCount}`, width - padRight - 55, height - 6);
+    }
+
+    /**
+     * 7. DOM TELEMETRY CARDS & STATE MATRIX TABLE UPDATES
+     */
+    function renderKPICards() {
+      const container = document.getElementById('kpi-cards-container');
+      container.innerHTML = state.agents.map(agent => {
+        const active = state.activeAgents[agent.id];
+        return `
+          <div class="bg-white rounded-2xl p-4 border ${agent.border} shadow-xs flex flex-col justify-between transition-opacity ${active ? 'opacity-100' : 'opacity-40'}">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-extrabold text-slate-900 flex items-center gap-2">
+                <span class="w-3 h-3 rounded-full" style="background:${agent.color}"></span>
+                ${agent.name}
+              </span>
+              <span class="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full ${agent.badgeBg} ${agent.badgeText}">
+                ${agent.status}
+              </span>
+            </div>
+            <div class="grid grid-cols-2 gap-2 my-1">
+              <div>
+                <span class="text-[10px] text-slate-400 uppercase font-bold block">Loss U(x,y)</span>
+                <span class="font-mono text-base font-extrabold text-slate-900">${agent.loss.toFixed(4)}</span>
+              </div>
+              <div>
+                <span class="text-[10px] text-slate-400 uppercase font-bold block">Grad ||&nabla;U||</span>
+                <span class="font-mono text-base font-bold text-slate-700">${agent.gradNorm.toFixed(3)}</span>
+              </div>
+            </div>
+            <div class="text-[11px] font-mono text-slate-500 pt-2 border-t border-slate-100 flex justify-between">
+              <span>Pos: (${agent.x.toFixed(2)}, ${agent.y.toFixed(2)})</span>
+              <span>KE: ${agent.ke.toFixed(3)}</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderTelemetryTable() {
+      const tbody = document.getElementById('telemetry-table-body');
+      tbody.innerHTML = state.agents.map(agent => {
+        if (!state.activeAgents[agent.id]) return '';
+        return `
+          <tr class="hover:bg-slate-50/80">
+            <td class="py-2 px-2 font-sans font-bold text-slate-800 flex items-center gap-1.5">
+              <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${agent.color}"></span>
+              ${agent.name}
+            </td>
+            <td class="py-2 px-2 text-slate-600">(${agent.x.toFixed(2)}, ${agent.y.toFixed(2)})</td>
+            <td class="py-2 px-2 font-bold text-slate-900">${agent.loss.toFixed(4)}</td>
+            <td class="py-2 px-2 text-slate-600">${agent.gradNorm.toFixed(3)}</td>
+            <td class="py-2 px-2 text-slate-600">${agent.ke.toFixed(3)}</td>
+            <td class="py-2 px-2 text-right">
+              <span class="px-2 py-0.5 rounded text-[10px] font-sans font-bold ${agent.badgeBg} ${agent.badgeText}">
+                ${agent.status}
+              </span>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    /**
+     * 8. USER INTERACTION HANDLERS & PRESET SCENARIOS
+     */
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      document.getElementById('toast-msg').textContent = msg;
+      toast.classList.remove('translate-y-20', 'opacity-0');
+      setTimeout(() => {
+        toast.classList.add('translate-y-20', 'opacity-0');
+      }, 2600);
+    }
+
+    function applyPreset(presetKey) {
+      // Update Preset Button visual state
+      document.querySelectorAll('.preset-btn').forEach(btn => {
+        if (btn.dataset.preset === presetKey) {
+          btn.className = "preset-btn flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold bg-indigo-50 text-indigo-900 border border-indigo-200 transition text-left";
+        } else {
+          btn.className = "preset-btn flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold bg-slate-50 text-slate-700 border border-slate-200 hover:bg-slate-100 transition text-left";
+        }
+      });
+
+      if (presetKey === 'rosenbrock') {
+        state.surface = 'rosenbrock';
+        state.spawnPos = { x: -1.4, y: 2.2 };
+        state.params = { lr: 0.004, beta: 0.88, mass: 1.2, gamma: 1.8, noise: 0.00 };
+      } else if (presetKey === 'saddle') {
+        state.surface = 'saddle';
+        // Spawn right on the unstable ridge y = 0.001 where vanilla SGD gets stuck
+        state.spawnPos = { x: 1.5, y: 0.001 };
+        state.params = { lr: 0.012, beta: 0.92, mass: 1.0, gamma: 1.1, noise: 0.14 };
+      } else if (presetKey === 'rastrigin') {
+        state.surface = 'rastrigin';
+        state.spawnPos = { x: -1.85, y: 1.65 };
+        state.params = { lr: 0.006, beta: 0.90, mass: 0.9, gamma: 1.2, noise: 0.36 };
+      } else if (presetKey === 'quadratic') {
+        state.surface = 'quadratic';
+        state.spawnPos = { x: -2.0, y: 1.5 };
+        state.params = { lr: 0.065, beta: 0.85, mass: 1.4, gamma: 2.2, noise: 0.00 };
+      }
+
+      syncControlsToState();
+      heatmapDirty = true;
+      initAgents();
+      state.isRunning = true;
+      updatePlayPauseUI();
+      showToast(`Loaded "${SURFACES[state.surface].name}" benchmark`);
+    }
+
+    function syncControlsToState() {
+      const surf = SURFACES[state.surface];
+      document.getElementById('select-surface').value = state.surface;
+      document.getElementById('surface-formula-badge').textContent = surf.formula;
+      document.getElementById('spawn-coords-label').textContent = `(${state.spawnPos.x.toFixed(2)}, ${state.spawnPos.y.toFixed(2)})`;
+      document.getElementById('hud-target').textContent = `(${surf.globalMin.x.toFixed(2)}, ${surf.globalMin.y.toFixed(2)})`;
+      document.getElementById('diagnostic-text').textContent = surf.diagnostic;
+
+      document.getElementById('slider-lr').value = state.params.lr;
+      document.getElementById('val-lr').textContent = state.params.lr.toFixed(4);
+
+      document.getElementById('slider-beta').value = state.params.beta;
+      document.getElementById('val-beta').textContent = state.params.beta.toFixed(2);
+
+      document.getElementById('slider-mass').value = state.params.mass;
+      document.getElementById('val-mass').textContent = state.params.mass.toFixed(2);
+
+      document.getElementById('slider-gamma').value = state.params.gamma;
+      document.getElementById('val-gamma').textContent = state.params.gamma.toFixed(2);
+
+      document.getElementById('slider-noise').value = state.params.noise;
+      document.getElementById('val-noise').textContent = state.params.noise.toFixed(2);
+    }
+
+    function updatePlayPauseUI() {
+      const btn = document.getElementById('btn-play-pause');
+      const icon = document.getElementById('play-icon');
+      const label = document.getElementById('play-label');
+      const pill = document.getElementById('sim-status-pill');
+
+      if (state.isRunning) {
+        icon.className = 'ph-bold ph-pause';
+        label.textContent = 'Pause';
+        btn.className = 'inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 active:scale-95 transition shadow-xs';
+        pill.textContent = 'Running 60 FPS';
+        pill.className = 'text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200';
+      } else {
+        icon.className = 'ph-bold ph-play';
+        label.textContent = 'Resume';
+        btn.className = 'inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 active:scale-95 transition shadow-xs';
+        pill.textContent = 'Paused';
+        pill.className = 'text-xs font-semibold px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200';
+      }
+    }
+
+    // Bind Canvas Click-to-Spawn
+    landscapeCanvas.addEventListener('mousedown', (e) => {
+      const rect = landscapeCanvas.getBoundingClientRect();
+      const sx = (e.clientX - rect.left) * (landscapeCanvas.width / rect.width);
+      const sy = (e.clientY - rect.top) * (landscapeCanvas.height / rect.height);
+      const { wx, wy } = screenToWorld(sx, sy, landscapeCanvas.width, landscapeCanvas.height);
+
+      state.spawnPos = { x: wx, y: wy };
+      document.getElementById('spawn-coords-label').textContent = `(${wx.toFixed(2)}, ${wy.toFixed(2)})`;
+      initAgents();
+      state.isRunning = true;
+      updatePlayPauseUI();
+      showToast(`Spawned agents at (${wx.toFixed(2)}, ${wy.toFixed(2)})`);
+    });
+
+    landscapeCanvas.addEventListener('mousemove', (e) => {
+      const rect = landscapeCanvas.getBoundingClientRect();
+      const sx = (e.clientX - rect.left) * (landscapeCanvas.width / rect.width);
+      const sy = (e.clientY - rect.top) * (landscapeCanvas.height / rect.height);
+      const { wx, wy } = screenToWorld(sx, sy, landscapeCanvas.width, landscapeCanvas.height);
+      const val = SURFACES[state.surface].eval(wx, wy);
+      document.getElementById('hud-cursor').textContent = `(${wx.toFixed(2)}, ${wy.toFixed(2)}) | U=${val.toFixed(2)}`;
+    });
+
+    // Bind Top Buttons
+    document.getElementById('btn-play-pause').addEventListener('click', () => {
+      state.isRunning = !state.isRunning;
+      updatePlayPauseUI();
+    });
+
+    document.getElementById('btn-step').addEventListener('click', () => {
+      state.isRunning = false;
+      updatePlayPauseUI();
+      stepSimulation();
+      renderLandscapeCanvas();
+      renderConvergenceCanvas();
+      renderKPICards();
+      renderTelemetryTable();
+    });
+
+    document.getElementById('btn-reset').addEventListener('click', () => {
+      initAgents();
+      state.isRunning = true;
+      updatePlayPauseUI();
+      showToast('Respawned all particles at initial coordinates');
+    });
+
+    // Export Telemetry CSV for Python/Pandas analysis
+    document.getElementById('btn-export-csv').addEventListener('click', () => {
+      if (state.telemetryLog.length === 0) return;
+      const headers = Object.keys(state.telemetryLog[0]);
+      const csvRows = [
+        headers.join(','),
+        ...state.telemetryLog.map(row => headers.map(h => row[h]).join(','))
+      ];
+      const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `optisim_${state.surface}_telemetry.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast('Exported telemetry CSV for Pandas/Python analysis!');
+    });
+
+    // Theory Drawer Toggle
+    document.getElementById('btn-toggle-theory').addEventListener('click', () => {
+      const drawer = document.getElementById('theory-drawer');
+      const label = document.getElementById('theory-btn-text');
+      drawer.classList.toggle('hidden');
+      label.textContent = drawer.classList.contains('hidden')
+        ? 'Inspect Differential Equations'
+        : 'Hide Differential Equations';
+    });
+
+    // Preset Buttons
+    document.querySelectorAll('.preset-btn').forEach(btn => {
+      btn.addEventListener('click', () => applyPreset(btn.dataset.preset));
+    });
+
+    // Surface Dropdown
+    document.getElementById('select-surface').addEventListener('change', (e) => {
+      applyPreset(e.target.value);
+    });
+
+    // Checkboxes for Force Vectors & Contours
+    document.getElementById('chk-vectors').addEventListener('change', (e) => {
+      state.showVectors = e.target.checked;
+      heatmapDirty = true;
+      renderLandscapeCanvas();
+    });
+
+    document.getElementById('chk-contours').addEventListener('change', (e) => {
+      state.showContours = e.target.checked;
+      heatmapDirty = true;
+      renderLandscapeCanvas();
+    });
+
+    // Agent Toggle Checkboxes
+    document.querySelectorAll('.agent-toggle').forEach(chk => {
+      chk.addEventListener('change', (e) => {
+        state.activeAgents[e.target.dataset.agent] = e.target.checked;
+        renderKPICards();
+        renderTelemetryTable();
+        renderLandscapeCanvas();
+        renderConvergenceCanvas();
+      });
+    });
+
+    // Real-time Sliders
+    document.getElementById('slider-lr').addEventListener('input', (e) => {
+      state.params.lr = parseFloat(e.target.value);
+      document.getElementById('val-lr').textContent = state.params.lr.toFixed(4);
+    });
+
+    document.getElementById('slider-beta').addEventListener('input', (e) => {
+      state.params.beta = parseFloat(e.target.value);
+      document.getElementById('val-beta').textContent = state.params.beta.toFixed(2);
+    });
+
+    document.getElementById('slider-mass').addEventListener('input', (e) => {
+      state.params.mass = parseFloat(e.target.value);
+      document.getElementById('val-mass').textContent = state.params.mass.toFixed(2);
+    });
+
+    document.getElementById('slider-gamma').addEventListener('input', (e) => {
+      state.params.gamma = parseFloat(e.target.value);
+      document.getElementById('val-gamma').textContent = state.params.gamma.toFixed(2);
+    });
+
+    document.getElementById('slider-noise').addEventListener('input', (e) => {
+      state.params.noise = parseFloat(e.target.value);
+      document.getElementById('val-noise').textContent = state.params.noise.toFixed(2);
+    });
+
+    /**
+     * 9. RESPONSIVE CANVAS SIZING & MAIN 60FPS ANIMATION LOOP
+     */
+    function resizeCanvases() {
+      const lRect = landscapeCanvas.parentElement.getBoundingClientRect();
+      landscapeCanvas.width = Math.floor(lRect.width);
+      landscapeCanvas.height = Math.floor(lRect.height);
+
+      const cRect = convergenceCanvas.parentElement.getBoundingClientRect();
+      convergenceCanvas.width = Math.floor(cRect.width - 16);
+      convergenceCanvas.height = Math.floor(cRect.height - 16);
+
+      heatmapDirty = true;
+      renderLandscapeCanvas();
+      renderConvergenceCanvas();
+    }
+
+    window.addEventListener('resize', resizeCanvases);
+
+    let frameCounter = 0;
+    function animateLoop() {
+      if (state.isRunning) {
+        stepSimulation();
+        renderLandscapeCanvas();
+        renderConvergenceCanvas();
+
+        // Throttle DOM table/KPI updates to every 4 frames for butter-smooth 60fps canvas rendering
+        frameCounter++;
+        if (frameCounter % 4 === 0) {
+          renderKPICards();
+          renderTelemetryTable();
+        }
+      }
+      requestAnimationFrame(animateLoop);
+    }
+
+    window.onload = function () {
+      syncControlsToState();
+      resizeCanvases();
+      initAgents();
+      animateLoop();
+    };
+  </script>
+</body>
+</html>
