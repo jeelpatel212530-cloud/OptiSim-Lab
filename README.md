@@ -33,3 +33,11 @@
 To interact with the live simulation directly in your browser, click the badge at the top or use the link below:  
 [🔗 Open OptiSim-Lab Live](https://jeelpatel212530-cloud.github.io/OptiSim-Lab/optisim_lab_dynamical_systems_ml_optimization_simulator.html)[cite: 8]
 
+##SCREENSHOTS
+
+<img width="1414" height="544" alt="Screenshot 2026-11-03 at 9 35 00 PM" src="https://github.com/user-attachments/assets/2edcd13c-1893-46d3-8394-baaefc593db7" />
+<img width="1414" height="544" alt="Screenshot 2026-11-03 at 9 35 00 PM" src="https://github.com/user-attachments/assets/9c73ecb9-9f5f-4696-a247-74d22d8bc8b5" />
+<img width="1338" height="471" alt="Screenshot 2026-11-03 at 9 36 08 PM" src="https://github.com/user-attachments/assets/64ba063d-aea7-4b7f-a5ce-060a734cbe6b" />
+
+
+
