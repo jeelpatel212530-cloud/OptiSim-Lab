@@ -36,7 +36,7 @@ To interact with the live simulation directly in your browser, click the badge a
 ##SCREENSHOTS
 
 <img width="1414" height="544" alt="Screenshot 2026-11-03 at 9 35 00 PM" src="https://github.com/user-attachments/assets/2edcd13c-1893-46d3-8394-baaefc593db7" />
-<img width="1414" height="544" alt="Screenshot 2026-11-03 at 9 35 00 PM" src="https://github.com/user-attachments/assets/9c73ecb9-9f5f-4696-a247-74d22d8bc8b5" />
+<img width="1355" height="724" alt="Screenshot 2026-11-03 at 9 35 50 PM" src="https://github.com/user-attachments/assets/f418aa1c-8ce6-4f20-8927-46fe3401e101" />
 <img width="1338" height="471" alt="Screenshot 2026-11-03 at 9 36 08 PM" src="https://github.com/user-attachments/assets/64ba063d-aea7-4b7f-a5ce-060a734cbe6b" />
 
 
